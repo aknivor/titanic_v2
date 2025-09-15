@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Titanic Survival Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: #333; line-height: 1.6; padding: 20px; min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px; margin: 0 auto; background: rgba(255, 255, 255, 0.95);
+            padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        header { text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #eaeaea; }
+        h1 { color: #2c3e50; margin-bottom: 15px; font-size: 2.5rem; }
+        .description { color: #7f8c8d; max-width: 800px; margin: 0 auto 20px; font-size: 1.1rem; }
+        .overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card {
+            background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center; transition: transform 0.3s ease;
+        }
+        .stat-card:hover { transform: translateY(-5px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); }
+        .stat-value { font-size: 2.2rem; font-weight: bold; color: #2980b9; margin: 10px 0; }
+        .factors-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 25px; margin-bottom: 30px; }
+        .factor-card {
+            background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        .factor-card:hover { transform: translateY(-5px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); }
+        .factor-title { font-size: 1.4rem; color: #2c3e50; margin-bottom: 15px; display: flex; align-items: center; }
+        .factor-icon { margin-right: 10px; font-size: 1.6rem; }
+        .chart-container { height: 250px; margin: 15px 0; }
+        .conclusion {
+            background: linear-gradient(120deg, #e8f4f8, #d1e7f4);
+            padding: 30px; border-radius: 10px; margin-top: 30px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .conclusion h2 { color: #2980b9; margin-bottom: 20px; font-size: 1.8rem; }
+        .key-findings { margin-top: 20px; }
+        .key-findings li { margin-bottom: 12px; list-style-type: disc; margin-left: 20px; line-height: 1.6; }
+        .survival-rate {
+            font-size: 1.1rem; font-weight: bold; color: #2c3e50; margin-top: 15px; text-align: center;
+            padding: 10px; background: #f8f9fa; border-radius: 5px;
+        }
+        .highlight {
+            background: linear-gradient(120deg, #a8e6cf, #dcedc1);
+            padding: 30px; border-radius: 10px; margin: 30px 0; text-align: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .highlight h2 { color: #2c3e50; margin-bottom: 15px; font-size: 1.8rem; }
+        .factor-impact { display: flex; justify-content: space-between; margin-top: 20px; flex-wrap: wrap; }
+        .impact-item {
+            flex: 1; min-width: 200px; text-align: center; padding: 20px; margin: 10px; background: white;
+            border-radius: 10px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); transition: transform 0.3s ease;
+        }
+        .impact-item:hover { transform: scale(1.05); }
+        .impact-value { font-size: 2rem; font-weight: bold; color: #2980b9; margin: 10px 0; }
+        .priority { color: #e74c3c; font-weight: bold; }
+        @media (max-width: 768px) {
+            .factors-container { grid-template-columns: 1fr; }
+            .factor-impact { flex-direction: column; }
+            .overview { grid-template-columns: 1fr; }
+        }
+        /* Small badge to show gender filter state for class chart */
+        .badge { font-size: .85rem; color: #555; margin-left: 6px; }
+        .controls { display:flex; gap:10px; align-items:center; justify-content:center; margin-bottom: 10px; }
+        select { padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Titanic Survival Analysis</h1>
+            <p class="description">Explore the key factors that influenced survival on the Titanic. This analysis is computed in the browser from <code>train.csv</code>.</p>
+            <div class="controls">
+                <label for="genderFilter">Filter for Class chart:</label>
+                <select id="genderFilter">
+                    <option value="all">All</option>
+                    <option value="female">Females only</option>
+                    <option value="male">Males only</option>
+                </select>
+                <span class="badge" id="classBadge">(All)</span>
+            </div>
+        </header>
+
+        <div class="overview">
+            <div class="stat-card">
+                <h3>Total Passengers</h3>
+                <div class="stat-value" id="kpiTotal">—</div>
+                <p>in the dataset</p>
+            </div>
+            <div class="stat-card">
+                <h3>Overall Survival Rate</h3>
+                <div class="stat-value" id="kpiOverall">—</div>
+                <p id="kpiSurvivors">— survivors</p>
+            </div>
+            <div class="stat-card">
+                <h3>Female Survival Rate</h3>
+                <div class="stat-value" id="kpiFemale">—</div>
+                <p id="kpiFemaleDetail">—</p>
+            </div>
+            <div class="stat-card">
+                <h3>Male Survival Rate</h3>
+                <div class="stat-value" id="kpiMale">—</div>
+                <p id="kpiMaleDetail">—</p>
+            </div>
+        </div>
+
+        <div class="highlight">
+            <h2>Most Important Survival Factor</h2>
+            <p>Based on the data analysis, <span class="priority">Gender</span> is the most significant factor in determining survival on the Titanic.</p>
+            <div class="survival-rate" id="genderRateLine">Female survival rate: — | Male survival rate: —</div>
+        </div>
+
+        <div class="factor-impact">
+            <div class="impact-item">
+                <h3>Gender Impact</h3>
+                <div class="impact-value" id="impactGender">—</div>
+                <p>Difference in survival rates</p>
+            </div>
+            <div class="impact-item">
+                <h3>Class Impact</h3>
+                <div class="impact-value" id="impactClass">—</div>
+                <p>Difference between 1st and 3rd class</p>
+            </div>
+            <div class="impact-item">
+                <h3>Age Impact</h3>
+                <div class="impact-value" id="impactAge">—</div>
+                <p>Difference between children and elderly</p>
+            </div>
+        </div>
+
+        <h2 style="margin: 30px 0 20px; text-align: center; color: #2c3e50;">Key Factors Analysis</h2>
+        <div class="factors-container">
+            <div class="factor-card">
+                <h3 class="factor-title"><span class="factor-icon">👑</span> Passenger Class</h3>
+                <p>Higher classes had priority access to lifeboats and were located closer to deck. <span id="classFilterBadge" class="badge"></span></p>
+                <div class="chart-container">
+                    <canvas id="classChart"></canvas>
+                </div>
+                <div class="survival-rate" id="classFooter">—</div>
+            </div>
+
+            <div class="factor-card">
+                <h3 class="factor-title"><span class="factor-icon">🚻</span> Gender</h3>
+                <p>"Women and children first" protocol greatly favored female survival.</p>
+                <div class="chart-container">
+                    <canvas id="genderChart"></canvas>
+                </div>
+                <div class="survival-rate" id="genderFooter">—</div>
+            </div>
+
+            <div class="factor-card">
+                <h3 class="factor-title"><span class="factor-icon">👶</span> Age</h3>
+                <p>Children had higher survival rates, especially in higher classes.</p>
+                <div class="chart-container">
+                    <canvas id="ageChart"></canvas>
+                </div>
+                <div class="survival-rate" id="ageFooter">—</div>
+            </div>
+
+            <div class="factor-card">
+                <h3 class="factor-title"><span class="factor-icon">👨‍👩‍👧‍👦</span> Family Size</h3>
+                <p>Passengers with 1–3 family members had better survival chances.</p>
+                <div class="chart-container">
+                    <canvas id="familyChart"></canvas>
+                </div>
+                <div class="survival-rate" id="familyFooter">—</div>
+            </div>
+
+            <div class="factor-card">
+                <h3 class="factor-title"><span class="factor-icon">💰</span> Fare Paid</h3>
+                <p>Higher fares (correlated with class) resulted in better survival rates.</p>
+                <div class="chart-container">
+                    <canvas id="fareChart"></canvas>
+                </div>
+                <div class="survival-rate" id="fareFooter">—</div>
+            </div>
+
+            <div class="factor-card">
+                <h3 class="factor-title"><span class="factor-icon">⛵</span> Embarkation Port</h3>
+                <p>Embarkation point correlated with class and thus survival rates.</p>
+                <div class="chart-container">
+                    <canvas id="embarkationChart"></canvas>
+                </div>
+                <div class="survival-rate" id="embarkFooter">—</div>
+            </div>
+        </div>
+
+        <div class="conclusion">
+            <h2>Conclusion: Key Factors in Titanic Survival</h2>
+            <p>Based on the comprehensive analysis of the Titanic dataset, the most important factors influencing survival were:</p>
+            <div class="key-findings" id="findingsList">
+                <!-- Filled dynamically -->
+            </div>
+            <p style="margin-top: 20px;">These factors demonstrate how societal norms and structural inequalities during the disaster significantly influenced survival outcomes. The "women and children first" protocol was clearly followed, but access to lifeboats was also strongly influenced by socioeconomic status as reflected in passenger class.</p>
+        </div>
+    </div>
+
+<script>
+const CSV_PATH = 'train.csv'; // change to 'data/train.csv' if needed
+
+function pct(x){ return Math.round(x*1000)/10; } // one decimal
+function mean(xs){ if(!xs.length) return 0; const s = xs.reduce((a,b)=>a+(+b||0),0); return s/xs.length; }
+function quantile(arr, q){
+  const a = arr.slice().filter(v=>!isNaN(v)).sort((x,y)=>x-y);
+  if(!a.length) return NaN; const pos = (a.length-1)*q;
+  const base = Math.floor(pos); const rest = pos-base;
+  return a[base] + (a[base+1]-a[base])*(isNaN(rest)?0:rest||0);
+}
+function ageGroup(a){
+  if(a===null || a===undefined || a==='') return 'Unknown';
+  const x = +a; if(isNaN(x)) return 'Unknown';
+  if(x<13) return 'Children (0-12)'; if(x<20) return 'Teens (13-19)';
+  if(x<60) return 'Adults (20-59)'; return 'Elderly (60+)';
+}
+function familyBucket(x){ const v=(+x)||0; return v>=6 ? '6+' : String(v); }
+
+function makeChart(ctx, type, labels, data, title){
+  return new Chart(ctx, {
+    type,
+    data: { labels, datasets: [{ label:title, data, borderWidth: 2, fill: type==='line'? false : true, tension: 0.2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display:false }, title: { display:true, text:title } },
+      scales: (type==='pie'||type==='doughnut') ? {} : {
+        y: { beginAtZero:true, max:100, ticks:{ callback:(v)=>v+'%' } },
+        x: {}
+      }
+    }
+  });
+}
+
+async function loadCSV(){
+  const res = await fetch(CSV_PATH, { cache: 'no-store' });
+  if(!res.ok) throw new Error('Failed to load train.csv');
+  const text = await res.text();
+  return new Promise(resolve=>{
+    Papa.parse(text, { header:true, dynamicTyping:true, complete: r=>resolve(r.data) });
+  });
+}
+
+function survivalRate(rows){ return pct(mean(rows.map(r=>+r.Survived||0))); }
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const rows = (await loadCSV()).filter(r => r && Object.keys(r).length);
+
+  // Derived fields
+  rows.forEach(r => {
+    r.FamilySize = (r.SibSp||0) + (r.Parch||0);
+    r.AgeGroup = ageGroup(r.Age);
+    r.EmbarkedLabel = ({'C':'Cherbourg','Q':'Queenstown','S':'Southampton'})[r.Embarked] || 'Unknown';
+  });
+
+  // KPIs
+  const total = rows.length;
+  const survivors = rows.filter(r=>r.Survived==1).length;
+  const overallRate = pct(survivors/Math.max(1,total));
+  const males = rows.filter(r=>r.Sex==='male');
+  const females = rows.filter(r=>r.Sex==='female');
+  const maleRate = survivalRate(males);
+  const femaleRate = survivalRate(females);
+
+  document.getElementById('kpiTotal').textContent = total;
+  document.getElementById('kpiOverall').textContent = `${overallRate}%`;
+  document.getElementById('kpiSurvivors').textContent = `${survivors} survivors`;
+  document.getElementById('kpiFemale').textContent = `${femaleRate}%`;
+  document.getElementById('kpiMale').textContent = `${maleRate}%`;
+  document.getElementById('kpiFemaleDetail').textContent = `${females.filter(r=>r.Survived==1).length} out of ${females.length} women`;
+  document.getElementById('kpiMaleDetail').textContent = `${males.filter(r=>r.Survived==1).length} out of ${males.length} men`;
+  document.getElementById('genderRateLine').textContent = `Female survival rate: ${femaleRate}% | Male survival rate: ${maleRate}%`;
+
+  // Impacts
+  const byClass = [1,2,3].map(c => survivalRate(rows.filter(r=>r.Pclass===c)));
+  const classImpact = (byClass[0] - byClass[2]).toFixed(1);
+  const childRate = survivalRate(rows.filter(r=>r.AgeGroup==='Children (0-12)'));
+  const elderlyRate = survivalRate(rows.filter(r=>r.AgeGroup==='Elderly (60+)'));
+  const ageImpact = (childRate - elderlyRate).toFixed(1);
+
+  document.getElementById('impactGender').textContent = `${(femaleRate - maleRate).toFixed(1)}%`;
+  document.getElementById('impactClass').textContent = `${classImpact}%`;
+  document.getElementById('impactAge').textContent = `${ageImpact}%`;
+
+  // Charts data
+  // 1) Class (with gender filter later)
+  const classLabels = ['1st Class','2nd Class','3rd Class'];
+  const classByGender = {
+    all: byClass,
+    female: [1,2,3].map(c=>survivalRate(rows.filter(r=>r.Pclass===c && r.Sex==='female'))),
+    male: [1,2,3].map(c=>survivalRate(rows.filter(r=>r.Pclass===c && r.Sex==='male')))
+  };
+  const classCtx = document.getElementById('classChart').getContext('2d');
+  let classChart = makeChart(classCtx, 'bar', classLabels, classByGender.all, 'Survival Rate by Passenger Class');
+
+  document.getElementById('classFooter').textContent =
+    `1st Class: ${classByGender.all[0]}% | 2nd Class: ${classByGender.all[1]}% | 3rd Class: ${classByGender.all[2]}%`;
+
+  // 2) Gender
+  const genderCtx = document.getElementById('genderChart').getContext('2d');
+  makeChart(genderCtx, 'doughnut',
+    ['Female Survived', 'Female Died', 'Male Survived', 'Male Died'],
+    [
+      pct(females.filter(r=>r.Survived==1).length/Math.max(1,females.length)),
+      100 - pct(females.filter(r=>r.Survived==1).length/Math.max(1,females.length)),
+      pct(males.filter(r=>r.Survived==1).length/Math.max(1,males.length)),
+      100 - pct(males.filter(r=>r.Survived==1).length/Math.max(1,males.length)),
+    ],
+    'Survival by Gender'
+  );
+  document.getElementById('genderFooter').textContent = `Female: ${femaleRate}% | Male: ${maleRate}%`;
+
+  // 3) Age
+  const ageOrder = ['Children (0-12)', 'Teens (13-19)', 'Adults (20-59)', 'Elderly (60+)'];
+  const ageRates = ageOrder.map(g=>survivalRate(rows.filter(r=>r.AgeGroup===g)));
+  const ageCtx = document.getElementById('ageChart').getContext('2d');
+  makeChart(ageCtx, 'bar', ageOrder, ageRates, 'Survival Rate by Age Group');
+  document.getElementById('ageFooter').textContent =
+    `Children: ${ageRates[0]}% | Adults: ${ageRates[2]}% | Elderly: ${ageRates[3]}%`;
+
+  // 4) Family
+  const famOrder = ['0','1','2','3','4','5','6+'];
+  const famRates = famOrder.map(b => survivalRate(rows.filter(r => (r.FamilySize>=6?'6+':String(r.FamilySize))===b)));
+  const familyCtx = document.getElementById('familyChart').getContext('2d');
+  makeChart(familyCtx, 'line', famOrder, famRates, 'Survival Rate by Family Size');
+  const bestFamIdx = famRates.indexOf(Math.max(...famRates));
+  document.getElementById('familyFooter').textContent =
+    `Peak at ${famOrder[bestFamIdx]}: ${famRates[bestFamIdx]}%`;
+
+  // 5) Fare (quartiles)
+  const fares = rows.map(r=>+r.Fare).filter(v=>!isNaN(v));
+  const q25 = quantile(fares, .25), q50 = quantile(fares, .50), q75 = quantile(fares, .75);
+  rows.forEach(r => {
+    const f = +r.Fare || 0;
+    r.FareBucket = (f<=q25)?'Lowest 25%':(f<=q50)?'25-50%':(f<=q75)?'50-75%':'Highest 25%';
+  });
+  const fareOrder = ['Lowest 25%','25-50%','50-75%','Highest 25%'];
+  const fareRates = fareOrder.map(b=>survivalRate(rows.filter(r=>r.FareBucket===b)));
+  const fareCtx = document.getElementById('fareChart').getContext('2d');
+  makeChart(fareCtx, 'bar', fareOrder, fareRates, 'Survival Rate by Fare Quartiles');
+  document.getElementById('fareFooter').textContent =
+    `Top quartile: ${fareRates[3]}% | Bottom quartile: ${fareRates[0]}%`;
+
+  // 6) Embarkation
+  const embOrder = ['Cherbourg', 'Queenstown', 'Southampton'];
+  const embRates = embOrder.map(e=>survivalRate(rows.filter(r=>r.EmbarkedLabel===e)));
+  const embCtx = document.getElementById('embarkationChart').getContext('2d');
+  new Chart(embCtx, {
+    type: 'pie',
+    data: { labels: embOrder, datasets: [{ data: embRates }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { title: { display: true, text: 'Survival Rate by Embarkation Port' } }
+    }
+  });
+  document.getElementById('embarkFooter').textContent =
+    `Cherbourg: ${embRates[0]}% | Queenstown: ${embRates[1]}% | Southampton: ${embRates[2]}%`;
+
+  // Findings list
+  const findings = [
+    `<li><span class="priority">Gender</span> is the strongest signal: women ${femaleRate}% vs men ${maleRate}%.</li>`,
+    `<li><span class="priority">Passenger class</span> matters: 1st class exceeds 3rd by ${classImpact}%.</li>`,
+    `<li><span class="priority">Age</span> effect: children outperform elderly by ${ageImpact}%.</li>`,
+    `<li><span class="priority">Socioeconomics</span>: higher fares and Cherbourg embarkation associate with better outcomes.</li>`
+  ];
+  document.getElementById('findingsList').innerHTML = findings.join('');
+
+  // Gender filter for class chart
+  const genderFilter = document.getElementById('genderFilter');
+  const classBadge = document.getElementById('classBadge');
+  genderFilter.addEventListener('change', (e)=>{
+    const key = e.target.value; // 'all' | 'female' | 'male'
+    classChart.data.datasets[0].data = classByGender[key];
+    classChart.update();
+    classBadge.textContent = `(${key.charAt(0).toUpperCase()+key.slice(1)})`;
+    document.getElementById('classFilterBadge').textContent = classBadge.textContent;
+  });
+});
+</script>
+</body>
+</html>
